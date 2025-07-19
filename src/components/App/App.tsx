@@ -1,77 +1,55 @@
-import { useState, useEffect } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import css from "./App.module.css";
-import { toast, Toaster } from "react-hot-toast";
-import SearchBar from "../SearchBar/SearchBar";
-import MovieGrid from "../MovieGrid/MovieGrid";
-import Loader from "../Loader/Loader";
-import ErrorMessage from "../ErrorMessage/ErrorMessage";
-import MovieModal from "../MovieModal/MovieModal";
-import { fetchMovies } from "../../services/movieService";
-import type { Movie } from "../../types/movie";
-import ReactPaginate from "react-paginate";
+import css from './App.module.css';
+import NoteList from '../NoteList/NoteList';
+import NoteModal from '../NoteModal/NoteModal';
+import Pagination from '../Pagination/Pagination';
+import SearchBox from '../SearchBox/SearchBox';
+import Loader from '../Loader/Loader';
+import ErrorMessage from '../ErrorMessage/ErrorMessage';
+import { useState } from 'react';
+import { useDebounce } from 'use-debounce';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { fetchNotes } from '../../services/noteService';
 
-function App() {
-  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
+export default function App() {
+  const [query, setQuery] = useState<string>('');
+  const [page, setPage] = useState<number>(1);
+  const [isCreateNote, setIsCreateNote] = useState<boolean>(false);
 
-  const { data, isLoading, isError, isSuccess } = useQuery({
-    queryKey: ["movies", searchQuery, currentPage],
-    queryFn: () => fetchMovies(searchQuery, currentPage),
-    enabled: searchQuery !== "",
+  const updateQuery = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setQuery(event.target.value);
+    setPage(1);
+  };
+
+  const [debouncedQuery] = useDebounce(query, 300);
+
+  const { data, isSuccess, isLoading, isError } = useQuery({
+    queryKey: ['notes', debouncedQuery, page],
+    queryFn: () => fetchNotes(debouncedQuery, page),
     placeholderData: keepPreviousData,
   });
 
-  const totalPages = data?.total_pages ?? 0;
-
-  useEffect(() => {
-    if (isSuccess && data?.results.length === 0) {
-      toast("No movies found for your request.");
-    }
-  }, [isSuccess, data]);
-
-  const handleSearch = async (query: string) => {
-    setSearchQuery(query);
-    setCurrentPage(1);
-  };
-
-  const handleSelectMovie = (movie: Movie) => {
-    setSelectedMovie(movie);
-  };
-
-  const closeModal = () => {
-    setSelectedMovie(null);
-  };
+  const handleClick = () => setIsCreateNote(true);
+  const handleClose = () => setIsCreateNote(false);
 
   return (
-    <>
-      <Toaster position="top-right" />
-      <SearchBar onSubmit={handleSearch} />
-      {isSuccess && totalPages > 1 && (
-        <ReactPaginate
-          pageCount={totalPages}
-          pageRangeDisplayed={5}
-          marginPagesDisplayed={1}
-          onPageChange={({ selected }) => setCurrentPage(selected + 1)}
-          forcePage={currentPage - 1}
-          containerClassName={css.pagination}
-          activeClassName={css.active}
-          nextLabel="→"
-          previousLabel="←"
-        />
-      )}
-
+    <div className={css.app}>
+      <header className={css.toolbar}>
+        <SearchBox query={query} updateQuery={updateQuery} />
+        {data?.totalPages && data.totalPages > 1 && (
+          <Pagination
+            page={page}
+            totalPages={data?.totalPages}
+            onPageChange={setPage}
+          />
+        )}
+        <button onClick={handleClick} className={css.button}>
+          Create note +
+        </button>
+      </header>
+      {isSuccess && data.notes.length > 0 && <NoteList notes={data.notes} />}
+      {isCreateNote && <NoteModal onClose={handleClose} />}
       {isLoading && <Loader />}
       {isError && <ErrorMessage />}
-      {selectedMovie && (
-        <MovieModal movie={selectedMovie} onClose={closeModal} />
-      )}
-      {isSuccess && data.results.length > 0 && (
-        <MovieGrid movies={data.results} onSelect={handleSelectMovie} />
-      )}
-    </>
+    </div>
   );
 }
-
-export default App;
