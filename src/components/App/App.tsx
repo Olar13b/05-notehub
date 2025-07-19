@@ -1,6 +1,6 @@
 import css from './App.module.css';
 import NoteList from '../NoteList/NoteList';
-import NoteModal from '../NoteModal/NoteModal';
+import NoteModal from '../Modal/Modal';
 import Pagination from '../Pagination/Pagination';
 import SearchBox from '../SearchBox/SearchBox';
 import Loader from '../Loader/Loader';
