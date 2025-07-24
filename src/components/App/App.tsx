@@ -1,68 +1,73 @@
-import css from "./App.module.css";
-import { useState, useEffect } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { useDebounce } from "use-debounce";
-
-import Modal from "../Modal/Modal";
-import NoteForm from "../NoteForm/NoteForm";
-import NoteList from "../NoteList/NoteList";
-import Pagination from "../Pagination/Pagination";
+import {fetchNotes} from "../../services/noteService";
+import css from "./App.module.css";
 import SearchBox from "../SearchBox/SearchBox";
+import { useEffect, useState } from "react";
+import { toast, Toaster } from "react-hot-toast";
+import NoteList from "../NoteList/NoteList";
 import Loader from "../Loader/Loader";
 import ErrorMessage from "../ErrorMessage/ErrorMessage";
-import { fetchNotes } from "../../services/noteService";
+import Pagination from "../Pagination/Pagination";
+import { useDebouncedCallback } from 'use-debounce';
+import Modal from "../Modal/Modal"
+import NoteForm from "../NoteForm/NoteForm"
 
-export default function App() {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+export default function App(){
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedSearchTerm]);
+  const [page, setPage] = useState<number>(1);
+  const [search, setSearch] = useState<string>("");
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["notes", debouncedSearchTerm, currentPage],
-    queryFn: () =>
-      fetchNotes({ query: debouncedSearchTerm, page: currentPage }),
+
+  const { data, isLoading, isError, isSuccess } = useQuery({
+    queryKey: ["notes", page, search],
+    queryFn: () => fetchNotes(search.trim() === "" ? { page } : { page, search }),
     placeholderData: keepPreviousData,
   });
 
+  useEffect(() => {
+    if (!data) return;
+
+      if (data.notes.length === 0) {
+      toast.error("No notes found for your request.");
+    }
+  }, [data, search]);
+
+  const noteData = data?.notes ?? [];
+  const totalPages = data?.totalPages ?? 1;
+
+const debouncedSearch = useDebouncedCallback((value: string) => {
+  setSearch(value);
+  setPage(1);
+}, 500);
+
+const openModal = () =>{
+  setIsModalOpen(true)
+}
+
+const closeModal = () =>{
+  setIsModalOpen(false);
+}
+
+
+
   return (
     <div className={css.app}>
+      <Toaster position="top-center" />
       <header className={css.toolbar}>
-        <SearchBox value={searchTerm} onChange={setSearchTerm} />
-
-        <Pagination
-          currentPage={currentPage}
-          totalPages={data?.totalPages || 1}
-          setPage={setCurrentPage}
-        />
-        <button
-          type="button"
-          onClick={() => setIsModalOpen(true)}
-          className={css.button}
-        >
-          Create note +
-        </button>
-
-        {isModalOpen && (
-          <Modal onClose={() => setIsModalOpen(false)}>
-            <NoteForm onClose={() => setIsModalOpen(false)} />
-          </Modal>
-        )}
-      </header>
-
-      {isLoading ? (
-        <Loader />
-      ) : isError ? (
-        <ErrorMessage />
-      ) : data && data.notes.length > 0 ? (
-        <NoteList notes={data.notes} />
-      ) : (
-        <p>No notes found</p>
+        <SearchBox onSearch={debouncedSearch}/>
+        {isSuccess && noteData.length > 0 && (
+        <Pagination total={totalPages} onChange={setPage} page={page} />
       )}
-    </div>
-  );
+        <button className={css.button} onClick={openModal}>Create note +</button>
+      </header>
+      {isLoading && <Loader/>}
+      {isError && <ErrorMessage />}
+      {noteData.length>0 && <NoteList notes={noteData} />}
+      {isModalOpen && 
+      <Modal closeModal={closeModal}>
+      <NoteForm closeModal={closeModal}/>
+      </Modal>
+      }
+    </div>)
 }

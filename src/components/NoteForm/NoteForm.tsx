@@ -1,58 +1,72 @@
-import css from "./NoteForm.module.css";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { createNote } from "../../services/noteService";
+import css from "./NoteForm.module.css";
 import { Formik, Form, Field, ErrorMessage } from "formik";
 import type { FormikHelpers } from "formik";
-import type { NoteTag } from "../../types/note";
 import * as Yup from "yup";
+import type { NewNote } from "../../types/newNotes";
+import {postNote} from '../../services/noteService';
+import { toast } from "react-hot-toast";
 
-const NoteFormSchema = Yup.object().shape({
-  title: Yup.string().min(3, "Too Short!").max(50).required("Required field"),
-  content: Yup.string().max(500, "Too long!"),
+const OrderSchema = Yup.object().shape({
+  title: Yup.string()
+    .min(3, "Title must be at least 3 characters")
+    .max(50, "Too Long!")
+    .required("Title is required"),
+  content: Yup.string().max(500, "Too Long!"),
   tag: Yup.string()
-    .oneOf(["Todo", "Work", "Personal", "Meeting", "Shopping"])
-    .required("Required field"),
+    .oneOf(["Todo", "Work", "Personal", "Meeting", "Shopping"], "Invalid tag")
+    .required("Tag is required"),
 });
 
-interface NoteFormProps {
-  onClose: () => void;
-}
-
-interface NoteFormValues {
+export interface FormValues {
   title: string;
   content: string;
-  tag: string;
+  tag: "Todo" | "Work" | "Personal" | "Meeting" | "Shopping";
 }
 
-const noteFormValues: NoteFormValues = {
-  title: "",
-  content: "",
-  tag: "Todo",
+interface NoteFormProps {
+  closeModal: () => void;
+}
+
+export default function NoteForm({ closeModal }: NoteFormProps) {
+  const queryClient = useQueryClient()
+
+ const mutation = useMutation({
+  mutationFn: (newNote: NewNote) => postNote(newNote),
+  onSuccess: () => {
+    toast.success("Note added");
+    queryClient.invalidateQueries({ queryKey: ["notes"] });
+    closeModal();
+  },
+  onError(){
+    toast.error("Failed to create note");
+  }
+});
+
+  const handleCloseModal = () => {
+    closeModal();
+  };
+
+const handleSubmit = (
+  values: FormValues,
+  formikHelpers: FormikHelpers<FormValues>
+) => {
+  mutation.mutate(values, {
+    onSettled: () => formikHelpers.resetForm(),
+  });
 };
 
-export default function NoteForm({ onClose }: NoteFormProps) {
-  const queryClient = useQueryClient();
-  const mutation = useMutation({
-    mutationFn: createNote,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notes"] });
-      onClose();
-    },
-  });
-
-  const handleSubmit = (
-    values: NoteFormValues,
-    formikHelpers: FormikHelpers<NoteFormValues>
-  ) => {
-    mutation.mutate({ ...values, tag: values.tag as NoteTag });
-    formikHelpers.resetForm();
+  const initialFormValues: FormValues = {
+    title: "",
+    content: "",
+    tag: "Todo",
   };
 
   return (
     <Formik
-      initialValues={noteFormValues}
+      initialValues={initialFormValues}
       onSubmit={handleSubmit}
-      validationSchema={NoteFormSchema}
+      validationSchema={OrderSchema}
     >
       <Form className={css.form}>
         <div className={css.formGroup}>
@@ -65,6 +79,7 @@ export default function NoteForm({ onClose }: NoteFormProps) {
           <label htmlFor="content">Content</label>
           <Field
             as="textarea"
+            id="content"
             name="content"
             rows={8}
             className={css.textarea}
@@ -74,7 +89,7 @@ export default function NoteForm({ onClose }: NoteFormProps) {
 
         <div className={css.formGroup}>
           <label htmlFor="tag">Tag</label>
-          <Field as="select" name="tag" className={css.select}>
+          <Field as="select" id="tag" name="tag" className={css.select}>
             <option value="Todo">Todo</option>
             <option value="Work">Work</option>
             <option value="Personal">Personal</option>
@@ -85,15 +100,15 @@ export default function NoteForm({ onClose }: NoteFormProps) {
         </div>
 
         <div className={css.actions}>
-          <button type="button" className={css.cancelButton} onClick={onClose}>
+          <button
+            type="button"
+            className={css.cancelButton}
+            onClick={handleCloseModal}
+          >
             Cancel
           </button>
-          <button
-            type="submit"
-            className={css.submitButton}
-            disabled={mutation.isPending}
-          >
-            {mutation.isPending ? "Creating..." : "Create note"}
+          <button type="submit" className={css.submitButton} disabled={false}>
+            Create note
           </button>
         </div>
       </Form>
