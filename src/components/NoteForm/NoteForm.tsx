@@ -1,64 +1,85 @@
+import { useState } from "react";
+import { Formik, Form, Field, ErrorMessage as FormikError } from "formik";
+import { object, string, mixed } from "yup";
 import css from "./NoteForm.module.css";
+import type { NoteTag } from "../../types/note";
+import type { Note } from "../../types/note";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { NewNoteData } from "../../types/note";
 import { createNote } from "../../services/noteService";
-import { Formik, Form, Field, ErrorMessage } from "formik";
-import * as Yup from "yup";
+import { AxiosError } from "axios";
+import ErrorMessage from "../ErrorMessage/ErrorMessage";
 
 interface NoteFormProps {
-  onSuccess: () => void;
-  onClose: () => void;
+  onCancel: () => void;
 }
 
-export default function NoteForm({ onSuccess, onClose }: NoteFormProps) {
+export interface NoteFormValues {
+  title: string;
+  content: string;
+  tag: NoteTag;
+}
+
+const initialValues: NoteFormValues = {
+  title: "",
+  content: "",
+  tag: "Todo",
+};
+
+const validationSchema = object({
+  title: string().min(3).max(50).required("Title is required"),
+  content: string().max(500),
+  tag: mixed<NoteTag>()
+    .oneOf(["Todo", "Work", "Personal", "Meeting", "Shopping"])
+    .required(),
+});
+
+export default function NoteForm({ onCancel }: NoteFormProps) {
+  const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
-  const { mutate } = useMutation({
-    mutationFn: (noteData: NewNoteData) => createNote(noteData),
+  const { mutate, isPending } = useMutation<
+    Note,
+    AxiosError<Error>,
+    NoteFormValues
+  >({
+    mutationFn: createNote,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notes"] });
-      onSuccess();
+      onCancel();
     },
+    onError: () => setError("Failed to create note. Please try again."),
   });
 
-  const NoteSchema = Yup.object().shape({
-    title: Yup.string()
-      .min(3, "Must be at least 3 characters")
-      .max(50, "Must be at most 50 characters")
-      .required("Title is required"),
-    content: Yup.string().max(500, "Must be at most 500 characters"),
-    tag: Yup.string()
-      .oneOf(["Todo", "Work", "Personal", "Meeting", "Shopping"])
-      .required("Tag is required"),
-  });
+  const handleSubmit = (values: NoteFormValues) => {
+    mutate(values);
+  };
 
   return (
     <Formik
-      initialValues={{ title: "", content: "", tag: "Todo" }}
-      validationSchema={NoteSchema}
-      onSubmit={(values, actions) => {
-        mutate(values);
-        actions.resetForm();
-      }}
+      initialValues={initialValues}
+      validationSchema={validationSchema}
+      onSubmit={handleSubmit}
     >
-      {({ isSubmitting }) => (
+      {({ isSubmitting, isValid }) => (
         <Form className={css.form}>
+          {error && <ErrorMessage message={error} />}
+
           <div className={css.formGroup}>
             <label htmlFor="title">Title</label>
-            <Field id="title" type="text" name="title" className={css.input} />
-            <ErrorMessage name="title" component="span" className={css.error} />
+            <Field name="title" id="title" type="text" className={css.input} />
+            <FormikError name="title" component="span" className={css.error} />
           </div>
 
           <div className={css.formGroup}>
             <label htmlFor="content">Content</label>
             <Field
               as="textarea"
-              id="content"
               name="content"
-              rows="8"
+              id="content"
+              rows={8}
               className={css.textarea}
             />
-            <ErrorMessage
+            <FormikError
               name="content"
               component="span"
               className={css.error}
@@ -67,30 +88,29 @@ export default function NoteForm({ onSuccess, onClose }: NoteFormProps) {
 
           <div className={css.formGroup}>
             <label htmlFor="tag">Tag</label>
-            <Field as="select" id="tag" name="tag" className={css.select}>
+            <Field as="select" name="tag" id="tag" className={css.select}>
               <option value="Todo">Todo</option>
               <option value="Work">Work</option>
               <option value="Personal">Personal</option>
               <option value="Meeting">Meeting</option>
               <option value="Shopping">Shopping</option>
             </Field>
-            <ErrorMessage name="tag" component="span" className={css.error} />
+            <FormikError name="tag" component="span" className={css.error} />
           </div>
 
           <div className={css.actions}>
             <button
               type="button"
+              onClick={onCancel}
               className={css.cancelButton}
-              onClick={onClose}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className={css.submitButton}
-              disabled={isSubmitting}
+              disabled={!isValid || isSubmitting || isPending}
             >
-              Create note
+              {isPending ? "Creating..." : "Create note"}
             </button>
           </div>
         </Form>

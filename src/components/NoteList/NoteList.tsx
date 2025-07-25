@@ -1,20 +1,24 @@
+import { useState } from "react";
+import type { Note } from "../../types/note";
 import css from "./NoteList.module.css";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { deleteNote } from "../../services/noteService";
-import type { Note } from "../../types/note";
+import ErrorMessage from "../ErrorMessage/ErrorMessage";
 
 interface NoteListProps {
   notes: Note[];
 }
-
 export default function NoteList({ notes }: NoteListProps) {
+  const [error, setError] = useState<string | null>(null);
+
   const queryClient = useQueryClient();
 
-  const mutation = useMutation({
-    mutationFn: (id: number) => deleteNote(id),
+  const { mutate: handleDelete } = useMutation({
+    mutationFn: deleteNote,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["notes"] });
     },
+    onError: () => setError("Failed to fetch notes. Please try again."),
   });
 
   return (
@@ -26,15 +30,16 @@ export default function NoteList({ notes }: NoteListProps) {
           <div className={css.footer}>
             <span className={css.tag}>{note.tag}</span>
             <button
-              type="button"
               className={css.button}
-              onClick={() => mutation.mutate(note.id)}
+              onClick={() => handleDelete(String(note.id))}
             >
               Delete
             </button>
           </div>
         </li>
       ))}
+      {error && <ErrorMessage message={error} />}
+      {notes.length === 0 && <p className={css.empty}>No notes found.</p>}
     </ul>
   );
 }
